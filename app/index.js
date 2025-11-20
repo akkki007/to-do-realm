@@ -8,54 +8,63 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { BSON } from 'realm';
-import { useQuery, useRealm } from '@realm/react';
-import { Task } from './Task';
+import { useQuery, useRealm } from '../realm/realmContext';
 
 const HomeScreen = () => {
   const realm = useRealm();
-  const taskResults = useQuery(Task);
+  const todoResults = useQuery('Todo');
   const [descriptionInput, setDescriptionInput] = useState('');
 
-  const sortedTasks = useMemo(
-    () => taskResults.sorted('createdAt', true),
-    [taskResults],
+  const sortedTodos = useMemo(
+    () => todoResults.sorted('createdAt', true),
+    [todoResults],
   );
 
   const handleAddTask = () => {
-    const description = descriptionInput.trim();
-    if (!description) {
+    const text = descriptionInput.trim();
+    if (!text) {
       return;
     }
 
     realm.write(() => {
-      realm.create(Task, {
-        _id: new BSON.UUID(),
-        description,
+      const currentMaxId = realm.objects('Todo').max('_id') ?? 0;
+      const nextId = currentMaxId + 1;
+
+      realm.create('Todo', {
+        _id: nextId,
+        text,
+        done: false,
+        createdAt: new Date(),
       });
     });
 
     setDescriptionInput('');
   };
 
-  const handleToggleStatus = (task) => {
-    if (!task || !task.isValid()) {
+  const handleToggleStatus = (todo) => {
+    if (!todo || !todo.isValid()) {
       return;
     }
 
     realm.write(() => {
-      task.isComplete = !task.isComplete;
+      todo.done = !todo.done;
     });
   };
 
-  const handleDeleteTask = (task) => {
-    if (!task || !task.isValid()) {
+  const handleDeleteTask = (todo) => {
+    if (!todo || !todo.isValid()) {
       return;
     }
 
     realm.write(() => {
-      realm.delete(task);
+      realm.delete(todo);
     });
+  };
+
+  const handleLogTodoCount = () => {
+    const todoCount = realm.objects('Todo').length;
+    // Debug: verify Realm persistence across app reloads.
+    console.log('Realm Todo count:', todoCount);
   };
 
   const renderTaskItem = ({ item }) => {
@@ -64,17 +73,17 @@ const HomeScreen = () => {
 
     const containerStyle = [
       styles.taskItem,
-      item.isComplete && styles.taskItemCompletedBackground,
+      item.done && styles.taskItemCompletedBackground,
     ];
 
     const statusCircleStyle = [
       styles.statusCircle,
-      item.isComplete && styles.statusCircleComplete,
+      item.done && styles.statusCircleComplete,
     ];
 
     const taskTextStyle = [
       styles.taskText,
-      item.isComplete && styles.taskTextCompleted,
+      item.done && styles.taskTextCompleted,
     ];
 
     return (
@@ -84,14 +93,14 @@ const HomeScreen = () => {
           onPress={handleTogglePress}
           accessibilityRole="button"
           accessibilityLabel={
-            item.isComplete ? 'Mark task as incomplete' : 'Mark task as complete'
+            item.done ? 'Mark task as incomplete' : 'Mark task as complete'
           }
         >
-          <Text style={styles.statusIcon}>{item.isComplete ? '✓' : '○'}</Text>
+          <Text style={styles.statusIcon}>{item.done ? '✓' : '○'}</Text>
         </Pressable>
 
         <View style={styles.taskTextContainer}>
-          <Text style={taskTextStyle}>{item.description}</Text>
+          <Text style={taskTextStyle}>{item.text}</Text>
         </View>
 
         <Pressable
@@ -113,6 +122,19 @@ const HomeScreen = () => {
       <View style={styles.header}>
         <Text style={styles.title}>Realm To‑Do</Text>
         <Text style={styles.subtitle}>Fast, offline, and clean UI.</Text>
+        <View style={styles.debugRow}>
+          <Text style={styles.debugText}>
+            Debug: {todoResults.length} todos in Realm
+          </Text>
+          <Pressable
+            onPress={handleLogTodoCount}
+            style={styles.debugButton}
+            accessibilityRole="button"
+            accessibilityLabel="Log Realm todo count to console"
+          >
+            <Text style={styles.debugButtonText}>Log</Text>
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.inputRow}>
@@ -136,8 +158,8 @@ const HomeScreen = () => {
       </View>
 
       <FlatList
-        data={sortedTasks}
-        keyExtractor={(item) => item._id.toHexString()}
+        data={sortedTodos}
+        keyExtractor={(item) => String(item._id)}
         renderItem={renderTaskItem}
         contentContainerStyle={styles.listContent}
       />
@@ -166,6 +188,27 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 14,
     color: '#9CA3AF',
+  },
+  debugRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  debugText: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  debugButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#1F2937',
+  },
+  debugButtonText: {
+    fontSize: 12,
+    color: '#E5E7EB',
+    fontWeight: '500',
   },
   inputRow: {
     flexDirection: 'row',
